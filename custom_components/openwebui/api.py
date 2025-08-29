@@ -1,6 +1,7 @@
 from __future__ import annotations
 import aiohttp
 from typing import Any, List
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 class OpenWebUIClient:
     def __init__(self, base_url: str, api_key: str, session: aiohttp.ClientSession):
@@ -14,6 +15,8 @@ class OpenWebUIClient:
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self._base}/api/chat/completions"
         async with self._session.post(url, headers=self._headers, json=payload) as resp:
+            if resp.status == 401:
+                raise ConfigEntryAuthFailed("Unauthorized (401) during chat_completions")
             resp.raise_for_status()
             return await resp.json()
 
@@ -23,33 +26,32 @@ class OpenWebUIClient:
         form = aiohttp.FormData()
         form.add_field("file", data, filename=name)
         async with self._session.post(url, headers=headers, data=form) as resp:
+            if resp.status == 401:
+                raise ConfigEntryAuthFailed("Unauthorized (401) during upload_file_bytes")
             resp.raise_for_status()
             return await resp.json()
 
     async def list_models(self) -> list[str]:
         """Return a list of model IDs. Used for auth + model pick."""
-        # Try OpenAI-compatible path first
         for path in ("/v1/models", "/api/models"):
             url = f"{self._base}{path}"
             try:
-                async with self._session.get(url, headers={"Authorization": self._headers["Authorization"]}) as r:
-                    if r.status == 401:
-                        raise PermissionError("unauthorized")
-                    r.raise_for_status()
-                    data = await r.json()
+                async with self._session.get(url, headers={"Authorization": self._headers["Authorization"]}) as resp:
+                    if resp.status == 401:
+                        raise ConfigEntryAuthFailed("Unauthorized (401) during list_models")
+                    resp.raise_for_status()
+                    data = await resp.json()
             except Exception:
                 continue
 
-            # Normalize a few known shapes
-            # OpenAI: {"data":[{"id":"gpt-4o-mini",...},...]}
-            # OWUI (varies): {"data":[{"id":"llama3.1"},...]} or {"models":[{"id":"..."},...]}
+            # Normalize
             items = []
             if isinstance(data, dict):
                 if isinstance(data.get("data"), list):
                     items = data["data"]
                 elif isinstance(data.get("models"), list):
                     items = data["models"]
-            if not items and isinstance(data, list):
+            elif isinstance(data, list):
                 items = data
 
             model_ids: List[str] = []
@@ -64,5 +66,4 @@ class OpenWebUIClient:
             if model_ids:
                 return sorted(set(model_ids))
 
-        # If we get here, both endpoints failed or returned empty.
         raise RuntimeError("Could not list models (auth or endpoint issue).")

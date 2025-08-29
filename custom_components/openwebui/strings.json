@@ -4,7 +4,9 @@
       "user": {
         "title": "OpenWebUI – What do you want to add?",
         "description": "Choose whether to add a Conversation agent or an AI Task.",
-        "data": { "entry_type": "Service type" }
+        "data": {
+          "entry_type": "Service type"
+        }
       },
       "connect": {
         "title": "OpenWebUI – Connect",
