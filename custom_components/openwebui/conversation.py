@@ -11,6 +11,7 @@ from homeassistant.components.conversation import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import intent  # ✅ correct import
 
 from .const import (
     DOMAIN,
@@ -65,7 +66,8 @@ class OpenWebUIConversationEntity(ConversationEntity):
         data = await self._client.chat_completions(payload)
         content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or "I don't have a response."
 
-        resp = conv.intent.IntentResponse(language=user_input.language)
+        # ✅ use helpers.intent.IntentResponse
+        resp = intent.IntentResponse(language=user_input.language)
         resp.async_set_speech(content)
 
         return conv.agent.ConversationResult(
