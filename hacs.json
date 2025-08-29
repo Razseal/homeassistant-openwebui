@@ -1,0 +1,8 @@
+{
+  "name": "OpenWebUI",
+  "description": "Conversation + AI-Task integration using OpenWebUI",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["openwebui"],
+  "homeassistant": "2025.8.0"
+}

@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OpenWebUI",
+        "description": "Connect Home Assistant to your OpenWebUI server.",
+        "data": {
+          "base_url": "Base URL (e.g. http://openwebui:8080)",
+          "api_key": "API Key",
+          "model": "Default model",
+          "default_collections": "RAG collection IDs (comma-separated, optional)",
+          "allow_control": "Allow device control (Assist CONTROL)"
+        }
+      }
+    }
+  }
+}
