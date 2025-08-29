@@ -1,12 +1,12 @@
 {
   "domain": "openwebui",
   "name": "OpenWebUI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "documentation": "https://github.com/Razseal/homeassistant-openwebui",
   "issue_tracker": "https://github.com/Razseal/homeassistant-openwebui/issues",
   "config_flow": true,
   "requirements": ["aiohttp>=3.9.0"],
   "codeowners": ["@Razseal"],
   "iot_class": "cloud_push",
-  "integration_type": "hub"
+  "integration_type": "service"
 }

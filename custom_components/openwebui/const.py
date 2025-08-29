@@ -10,3 +10,5 @@ DEFAULT_MODEL = "llama3.1"
 
 OWUI_CHAT_PATH = "/api/chat/completions"
 OWUI_UPLOAD_PATH = "/api/v1/files/"
+OWUI_MODELS_PATH = "/v1/models"          # primary (OpenAI-compatible)
+OWUI_MODELS_PATH_FALLBACK = "/api/models"  # some OWUI builds expose this
