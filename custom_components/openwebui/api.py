@@ -44,7 +44,6 @@ class OpenWebUIClient:
             except Exception:
                 continue
 
-            # Normalize
             items = []
             if isinstance(data, dict):
                 if isinstance(data.get("data"), list):

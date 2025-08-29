@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-import voluptuous as vol
 from typing import List
 
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
@@ -23,7 +23,7 @@ from .const import (
 )
 from .api import OpenWebUIClient
 
-# ----- Schemas -----
+# Schemas
 STEP_PICK_SCHEMA = vol.Schema({
     vol.Required(ENTRY_TYPE, default=ENTRY_CONVERSATION): vol.In([ENTRY_CONVERSATION, ENTRY_AI_TASK]),
 })
@@ -39,21 +39,21 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        # create flow state
+        # state for create flow
         self._entry_type: str | None = None
         self._base_url: str | None = None
         self._api_key: str | None = None
         self._models: List[str] = []
 
-        # reauth state
+        # state for reauth
         self._reauth_entry_id: str | None = None
 
     # ---------- CREATE ----------
     async def async_step_user(self, user_input=None) -> FlowResult:
-        """Step 1: choose service type (conversation vs ai_task)."""
+        # Step 1: choose service type (conversation vs ai_task).
         if user_input is not None:
             self._entry_type = user_input[ENTRY_TYPE]
-            # Reserve a unique ID up front; avoids DB collisions.
+            # Reserve a unique ID up front to avoid DB collisions.
             await self.async_set_unique_id(f"{DOMAIN}_{uuid.uuid4()}")
             self._abort_if_unique_id_configured()
             return await self.async_step_connect()
@@ -61,7 +61,7 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user", data_schema=STEP_PICK_SCHEMA)
 
     async def async_step_connect(self, user_input=None) -> FlowResult:
-        """Step 2: base URL + API key; validate by listing models."""
+        # Step 2: base URL + API key; validate by listing models.
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -80,15 +80,15 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._api_key = api_key
                     self._models = models
                     return await self.async_step_model()
-            except PermissionError:
-                errors["base"] = "invalid_auth"
-            except Exception:
-                errors["base"] = "cannot_connect"
+            except Exception as exc:
+                # Distinguish auth vs connect inside client; here we keep it simple.
+                msg = str(exc).lower()
+                errors["base"] = "invalid_auth" if "unauthorized" in msg or "auth" in msg else "cannot_connect"
 
         return self.async_show_form(step_id="connect", data_schema=STEP_CONNECT_SCHEMA, errors=errors)
 
     async def async_step_model(self, user_input=None) -> FlowResult:
-        """Step 3: pick model + options."""
+        # Step 3: pick model + options.
         assert self._entry_type and self._base_url and self._api_key and self._models
 
         default_model = DEFAULT_MODEL if DEFAULT_MODEL in self._models else self._models[0]
@@ -100,7 +100,7 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         })
 
         if user_input is not None:
-            # Keep immutable connection bits in data; mutable in options.
+            # immutable connection bits go in data; mutable bits go in options
             data = {
                 ENTRY_TYPE: self._entry_type,
                 CONF_BASE_URL: self._base_url,
@@ -118,15 +118,14 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ---------- REAUTH ----------
     async def async_step_reauth(self, data) -> FlowResult:
-        """Begin re-auth flow (trigger with ConfigEntryAuthFailed)."""
-        # data may include 'entry_id' depending on caller
+        # Begin re-auth (triggered by ConfigEntryAuthFailed).
         self._reauth_entry_id = (data or {}).get("entry_id")
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input=None) -> FlowResult:
         errors: dict[str, str] = {}
 
-        # pull current entry to prefill
+        # Prefill current values if available
         base_default = ""
         key_default = ""
         entry = None
@@ -158,10 +157,9 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         self.hass.config_entries.async_update_entry(entry, data=new_data)
                         await self.hass.config_entries.async_reload(entry.entry_id)
                     return self.async_abort(reason="reauth_successful")
-            except PermissionError:
-                errors["base"] = "invalid_auth"
-            except Exception:
-                errors["base"] = "cannot_connect"
+            except Exception as exc:
+                msg = str(exc).lower()
+                errors["base"] = "invalid_auth" if "unauthorized" in msg or "auth" in msg else "cannot_connect"
 
         return self.async_show_form(step_id="reauth_confirm", data_schema=schema, errors=errors)
 
@@ -173,7 +171,7 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OpenWebUIOptionsFlowHandler(config_entries.OptionsFlow):
-    """Options flow: change model / collections / CONTROL. Reload is handled by update_listener."""
+    """Options flow: change model/collections/control."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._entry = config_entry
@@ -182,13 +180,12 @@ class OpenWebUIOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None) -> FlowResult:
         cfg = {**self._entry.data, **self._entry.options}
 
-        # Try to refresh the model list live
+        # Refresh model list (best effort)
         session = aiohttp_client.async_get_clientsession(self.hass)
         client = OpenWebUIClient(cfg[CONF_BASE_URL], cfg[CONF_API_KEY], session)
         try:
             self._models = await client.list_models()
         except Exception:
-            # Fall back to current model only
             current = cfg.get(CONF_MODEL, DEFAULT_MODEL)
             self._models = [current]
 
