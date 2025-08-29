@@ -2,16 +2,40 @@
   "config": {
     "step": {
       "user": {
-        "title": "OpenWebUI",
-        "description": "Connect Home Assistant to your OpenWebUI server.",
+        "title": "OpenWebUI – What do you want to add?",
+        "description": "Choose whether to add a Conversation agent or an AI Task.",
+        "data": { "entry_type": "Service type" }
+      },
+      "connect": {
+        "title": "OpenWebUI – Connect",
+        "description": "Enter your OpenWebUI server URL and API key. We'll verify access.",
         "data": {
           "base_url": "Base URL (e.g. http://openwebui:8080)",
-          "api_key": "API Key",
+          "api_key": "API Key"
+        }
+      },
+      "model": {
+        "title": "OpenWebUI – Model & Options",
+        "description": "Pick a model from your OpenWebUI server and optional settings.",
+        "data": {
           "model": "Default model",
           "default_collections": "RAG collection IDs (comma-separated, optional)",
           "allow_control": "Allow device control (Assist CONTROL)"
         }
+      },
+      "reauth_confirm": {
+        "title": "OpenWebUI – Re-authenticate",
+        "description": "Your credentials no longer work. Update Base URL and/or API key.",
+        "data": {
+          "base_url": "Base URL",
+          "api_key": "API Key"
+        }
       }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach OpenWebUI or endpoint did not respond as expected.",
+      "invalid_auth": "Invalid API key.",
+      "reauth_successful": "Re-authentication successful."
     }
   }
 }
