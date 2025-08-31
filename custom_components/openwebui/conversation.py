@@ -6,9 +6,9 @@ from homeassistant.components import conversation as conv
 from homeassistant.components.conversation import (
     ConversationEntity,
     ConversationInput,
-    ConversationResult,
     ChatLog,
 )
+from homeassistant.components.conversation.agent import ConversationResult  # <-- key change
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -93,7 +93,7 @@ class OpenWebUIConversationEntity(ConversationEntity):
         resp = intent.IntentResponse(language=user_input.language)
         resp.async_set_speech(content)
 
-        return conv.agent.ConversationResult(
+        return ConversationResult(
             conversation_id=getattr(chat_log, "conversation_id", None),
             response=resp,
             continue_conversation=False,
