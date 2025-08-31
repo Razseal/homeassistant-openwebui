@@ -1,14 +1,13 @@
 from __future__ import annotations
-from typing import Any, List
+from typing import Any
 import logging
 
 from homeassistant.components import conversation as conv
 from homeassistant.components.conversation import (
     ConversationEntity,
     ConversationInput,
-    ChatLog,
 )
-from homeassistant.components.conversation.agent import ConversationResult  # <-- key change
+from homeassistant.components.conversation.agent import ConversationResult
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -25,39 +24,13 @@ from .api import OpenWebUIClient
 
 _LOGGER = logging.getLogger(__name__)
 
-def _chatlog_to_messages(chat_log: ChatLog) -> List[dict[str, Any]]:
-    """Extract prior turns from ChatLog across HA versions; fail safe."""
-    msgs: list[dict[str, Any]] = []
-    try:
-        items = None
-        if hasattr(chat_log, "async_items"):
-            items = chat_log.async_items()
-        elif hasattr(chat_log, "items"):
-            items = chat_log.items
-        elif hasattr(chat_log, "messages"):
-            items = chat_log.messages
-        else:
-            items = []
-
-        iterable = list(items) if not isinstance(items, list) else items
-        for item in iterable:
-            content = getattr(item, "content", None) or getattr(item, "text", None)
-            if not content:
-                continue
-            if getattr(item, "is_user", False) or getattr(item, "user", False):
-                msgs.append({"role": "user", "content": content})
-            elif getattr(item, "is_assistant", False):
-                msgs.append({"role": "assistant", "content": content})
-    except Exception as e:
-        _LOGGER.debug("OpenWebUI: could not parse ChatLog history (%s); continuing without history", e)
-
-    return msgs
 
 class OpenWebUIConversationEntity(ConversationEntity):
+    """Minimal, robust conversation agent for OpenWebUI."""
     _attr_has_entity_name = True
     _attr_name = "OpenWebUI"
 
-    def __init__(self, hass: HomeAssistant, client: OpenWebUIClient, cfg: dict):
+    def __init__(self, hass: HomeAssistant, client: OpenWebUIClient, cfg: dict[str, Any]):
         self.hass = hass
         self._client = client
         self._model = cfg.get(CONF_MODEL, DEFAULT_MODEL)
@@ -67,7 +40,7 @@ class OpenWebUIConversationEntity(ConversationEntity):
         self._allow_control = bool(cfg.get(CONF_ALLOW_CONTROL, False))
 
     @property
-    def supported_languages(self):
+    def supported_languages(self) -> str:
         return "*"
 
     @property
@@ -75,29 +48,32 @@ class OpenWebUIConversationEntity(ConversationEntity):
         return conv.ConversationEntityFeature.CONTROL if self._allow_control else 0
 
     async def _async_handle_message(
-        self, user_input: ConversationInput, chat_log: ChatLog
+        self, user_input: ConversationInput, _chat_log
     ) -> ConversationResult:
-        messages = _chatlog_to_messages(chat_log)
-
-        # Always include current user text
-        if not messages or messages[-1].get("role") != "user":
-            messages.append({"role": "user", "content": user_input.text})
+        # Keep it simple: just send the current user text to OpenWebUI
+        messages = [{"role": "user", "content": user_input.text}]
 
         payload: dict[str, Any] = {"model": self._model, "messages": messages}
         if self._collections:
             payload["files"] = [{"type": "collection", "id": cid} for cid in self._collections]
 
         data = await self._client.chat_completions(payload)
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or "I don't have a response."
+        content = (
+            (data.get("choices") or [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            or "I don't have a response."
+        )
 
         resp = intent.IntentResponse(language=user_input.language)
         resp.async_set_speech(content)
 
         return ConversationResult(
-            conversation_id=getattr(chat_log, "conversation_id", None),
+            conversation_id=getattr(_chat_log, "conversation_id", None),
             response=resp,
             continue_conversation=False,
         )
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
