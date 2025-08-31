@@ -23,7 +23,6 @@ from .const import (
 )
 from .api import OpenWebUIClient
 
-# Schemas
 STEP_PICK_SCHEMA = vol.Schema({
     vol.Required(ENTRY_TYPE, default=ENTRY_CONVERSATION): vol.In([ENTRY_CONVERSATION, ENTRY_AI_TASK]),
 })
@@ -33,44 +32,37 @@ STEP_CONNECT_SCHEMA = vol.Schema({
     vol.Required(CONF_API_KEY): str,
 })
 
-
 class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for OpenWebUI."""
     VERSION = 1
 
     def __init__(self) -> None:
-        # state for create flow
+        # create flow state
         self._entry_type: str | None = None
         self._base_url: str | None = None
         self._api_key: str | None = None
         self._models: List[str] = []
-
-        # state for reauth (hold the ConfigEntry, not an id string)
+        # reauth state: hold ConfigEntry, not an id string (avoid HA collision)
         self._reauth_entry = None  # type: ignore[assignment]
 
     # ---------- CREATE ----------
     async def async_step_user(self, user_input=None) -> FlowResult:
-        # Step 1: choose service type (conversation vs ai_task).
         if user_input is not None:
             self._entry_type = user_input[ENTRY_TYPE]
-            # Reserve a unique ID up front to avoid DB collisions.
+            # unique per entry to avoid collisions
             await self.async_set_unique_id(f"{DOMAIN}_{uuid.uuid4()}")
             self._abort_if_unique_id_configured()
             return await self.async_step_connect()
-
         return self.async_show_form(step_id="user", data_schema=STEP_PICK_SCHEMA)
 
     async def async_step_connect(self, user_input=None) -> FlowResult:
-        # Step 2: base URL + API key; validate by listing models.
         errors: dict[str, str] = {}
-
         if user_input is not None:
             base_url = user_input[CONF_BASE_URL].strip()
             api_key = user_input[CONF_API_KEY].strip()
 
             session = aiohttp_client.async_get_clientsession(self.hass)
             client = OpenWebUIClient(base_url, api_key, session)
-
             try:
                 models = await client.list_models()
                 if not models:
@@ -81,18 +73,15 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._models = models
                     return await self.async_step_model()
             except Exception as exc:
-                # Distinguish auth vs connect inside client; here we keep it simple.
                 msg = str(exc).lower()
                 errors["base"] = "invalid_auth" if "unauthorized" in msg or "auth" in msg else "cannot_connect"
 
         return self.async_show_form(step_id="connect", data_schema=STEP_CONNECT_SCHEMA, errors=errors)
 
     async def async_step_model(self, user_input=None) -> FlowResult:
-        # Step 3: pick model + options.
         assert self._entry_type and self._base_url and self._api_key and self._models
 
         default_model = DEFAULT_MODEL if DEFAULT_MODEL in self._models else self._models[0]
-
         schema = vol.Schema({
             vol.Required(CONF_MODEL, default=default_model): vol.In(self._models),
             vol.Optional(CONF_DEFAULT_COLLECTIONS, default=""): str,
@@ -100,7 +89,6 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         })
 
         if user_input is not None:
-            # immutable connection bits go in data; mutable bits go in options
             data = {
                 ENTRY_TYPE: self._entry_type,
                 CONF_BASE_URL: self._base_url,
@@ -119,7 +107,6 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ---------- REAUTH ----------
     async def async_step_reauth(self, data) -> FlowResult:
         """Begin re-auth flow (triggered by ConfigEntryAuthFailed)."""
-        # Prefer entry_id from context; fallback to data
         entry_id = self.context.get("entry_id") or (data or {}).get("entry_id")
         if entry_id:
             self._reauth_entry = self.hass.config_entries.async_get_entry(entry_id)
@@ -147,7 +134,6 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             session = aiohttp_client.async_get_clientsession(self.hass)
             client = OpenWebUIClient(new_base, new_key, session)
-
             try:
                 models = await client.list_models()
                 if not models:
@@ -170,7 +156,6 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
         return OpenWebUIOptionsFlowHandler(config_entry)
 
-
 class OpenWebUIOptionsFlowHandler(config_entries.OptionsFlow):
     """Options flow: change model/collections/control."""
 
@@ -181,7 +166,7 @@ class OpenWebUIOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None) -> FlowResult:
         cfg = {**self._entry.data, **self._entry.options}
 
-        # Refresh model list (best effort)
+        # Try to refresh the model list live
         session = aiohttp_client.async_get_clientsession(self.hass)
         client = OpenWebUIClient(cfg[CONF_BASE_URL], cfg[CONF_API_KEY], session)
         try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, List
+import logging
 
 from homeassistant.components import conversation as conv
 from homeassistant.components.conversation import (
@@ -11,7 +12,7 @@ from homeassistant.components.conversation import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import intent  # ✅ correct import
+from homeassistant.helpers import intent
 
 from .const import (
     DOMAIN,
@@ -22,13 +23,34 @@ from .const import (
 )
 from .api import OpenWebUIClient
 
+_LOGGER = logging.getLogger(__name__)
+
 def _chatlog_to_messages(chat_log: ChatLog) -> List[dict[str, Any]]:
+    """Extract prior turns from ChatLog across HA versions; fail safe."""
     msgs: list[dict[str, Any]] = []
-    for item in chat_log.async_items():
-        if item.is_user:
-            msgs.append({"role": "user", "content": item.content})
-        elif item.is_assistant:
-            msgs.append({"role": "assistant", "content": item.content})
+    try:
+        items = None
+        if hasattr(chat_log, "async_items"):
+            items = chat_log.async_items()
+        elif hasattr(chat_log, "items"):
+            items = chat_log.items
+        elif hasattr(chat_log, "messages"):
+            items = chat_log.messages
+        else:
+            items = []
+
+        iterable = list(items) if not isinstance(items, list) else items
+        for item in iterable:
+            content = getattr(item, "content", None) or getattr(item, "text", None)
+            if not content:
+                continue
+            if getattr(item, "is_user", False) or getattr(item, "user", False):
+                msgs.append({"role": "user", "content": content})
+            elif getattr(item, "is_assistant", False):
+                msgs.append({"role": "assistant", "content": content})
+    except Exception as e:
+        _LOGGER.debug("OpenWebUI: could not parse ChatLog history (%s); continuing without history", e)
+
     return msgs
 
 class OpenWebUIConversationEntity(ConversationEntity):
@@ -56,6 +78,8 @@ class OpenWebUIConversationEntity(ConversationEntity):
         self, user_input: ConversationInput, chat_log: ChatLog
     ) -> ConversationResult:
         messages = _chatlog_to_messages(chat_log)
+
+        # Always include current user text
         if not messages or messages[-1].get("role") != "user":
             messages.append({"role": "user", "content": user_input.text})
 
@@ -66,12 +90,11 @@ class OpenWebUIConversationEntity(ConversationEntity):
         data = await self._client.chat_completions(payload)
         content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or "I don't have a response."
 
-        # ✅ use helpers.intent.IntentResponse
         resp = intent.IntentResponse(language=user_input.language)
         resp.async_set_speech(content)
 
         return conv.agent.ConversationResult(
-            conversation_id=chat_log.conversation_id,
+            conversation_id=getattr(chat_log, "conversation_id", None),
             response=resp,
             continue_conversation=False,
         )
