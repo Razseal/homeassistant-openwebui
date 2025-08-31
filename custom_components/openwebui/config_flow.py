@@ -45,8 +45,8 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._api_key: str | None = None
         self._models: List[str] = []
 
-        # state for reauth
-        self._reauth_entry_id: str | None = None
+        # state for reauth (hold the ConfigEntry, not an id string)
+        self._reauth_entry = None  # type: ignore[assignment]
 
     # ---------- CREATE ----------
     async def async_step_user(self, user_input=None) -> FlowResult:
@@ -118,8 +118,11 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ---------- REAUTH ----------
     async def async_step_reauth(self, data) -> FlowResult:
-        # Begin re-auth (triggered by ConfigEntryAuthFailed).
-        self._reauth_entry_id = (data or {}).get("entry_id")
+        """Begin re-auth flow (triggered by ConfigEntryAuthFailed)."""
+        # Prefer entry_id from context; fallback to data
+        entry_id = self.context.get("entry_id") or (data or {}).get("entry_id")
+        if entry_id:
+            self._reauth_entry = self.hass.config_entries.async_get_entry(entry_id)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input=None) -> FlowResult:
@@ -128,9 +131,7 @@ class OpenWebUIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Prefill current values if available
         base_default = ""
         key_default = ""
-        entry = None
-        if self._reauth_entry_id:
-            entry = self.hass.config_entries.async_get_entry(self._reauth_entry_id)
+        entry = self._reauth_entry
         if entry:
             base_default = entry.data.get(CONF_BASE_URL, "")
             key_default = entry.data.get(CONF_API_KEY, "")
